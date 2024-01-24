@@ -9,7 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 )
+
+const MAX_RESULTS = 20
 
 func main() {
 	searcher := Searcher{}
@@ -48,10 +53,21 @@ func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request
 			w.Write([]byte("missing search query in URL params"))
 			return
 		}
-		results := searcher.Search(query[0])
+
+		batch, _ := r.URL.Query()["b"]
+		batchIdx := 0
+		var err error
+		if len(batch) > 0 {
+			batchIdx, err = strconv.Atoi(batch[0])
+			if err != nil {
+				batchIdx = 0
+			}
+		}
+
+		results := searcher.Search(query[0], batchIdx)
 		buf := &bytes.Buffer{}
 		enc := json.NewEncoder(buf)
-		err := enc.Encode(results)
+		err = enc.Encode(results)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("encoding failure"))
@@ -68,15 +84,18 @@ func (s *Searcher) Load(filename string) error {
 		return fmt.Errorf("Load: %w", err)
 	}
 	s.CompleteWorks = string(dat)
-	s.SuffixArray = suffixarray.New(dat)
+	s.SuffixArray = suffixarray.New([]byte(strings.ToLower(string(dat))))
 	return nil
 }
 
-func (s *Searcher) Search(query string) []string {
-	idxs := s.SuffixArray.Lookup([]byte(query), -1)
+func (s *Searcher) Search(query string, batch int) []string {
+	idxs := s.SuffixArray.Lookup([]byte(strings.ToLower(query)), -1)
+	sort.Ints(idxs)
 	results := []string{}
-	for _, idx := range idxs {
-		results = append(results, s.CompleteWorks[idx-250:idx+250])
+	for i, idx := range idxs {
+		if i >= batch*MAX_RESULTS && i < min(len(idxs), (batch+1)*MAX_RESULTS) {
+			results = append(results, s.CompleteWorks[idx-250:idx+250])
+		}
 	}
 	return results
 }

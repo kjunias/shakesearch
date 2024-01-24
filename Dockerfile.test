@@ -1,4 +1,4 @@
-FROM node:14 AS test-build
+FROM node:18 AS test-build
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN npm ci
 
 COPY test.js .
 
-FROM golang:1.16 AS go-build
+FROM golang:1.21 AS go-build
 
 WORKDIR /app
 
